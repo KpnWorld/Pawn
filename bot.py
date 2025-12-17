@@ -1,3 +1,5 @@
+from flask import Flask
+from threading import Thread
 import discord
 from discord.ext import commands, tasks
 import json
@@ -649,7 +651,26 @@ async def on_command_error(ctx, error):
 
 # ==================== RUN BOT ====================
 
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Bot is alive!"
+
+@app.route('/health')
+def health():
+    return {"status": "healthy", "guilds": len(bot.guilds)}
+
+def run():
+    app.run(host='0.0.0.0', port=8080)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.daemon = True
+    t.start()
+
 if __name__ == "__main__":
+    keep_alive()
     TOKEN = os.getenv('DISCORD_TOKEN')
     if not TOKEN:
         print("Error: DISCORD_BOT_TOKEN environment variable not set!")
