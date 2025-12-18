@@ -1,5 +1,5 @@
 import discord
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 
 # ==================== COLOR SCHEME ====================
@@ -19,7 +19,8 @@ def create_base_embed(
     title: str,
     description: str,
     guild: Optional[discord.Guild] = None,
-    color: int = Colors.BASE_GRAY
+    color: int = Colors.BASE_GRAY,
+    show_timestamp: bool = False
 ) -> discord.Embed:
     """
     Create a base embed with standard formatting
@@ -29,16 +30,24 @@ def create_base_embed(
         description: Embed description
         guild: Guild object for footer icon
         color: Embed color (defaults to base gray)
+        show_timestamp: Whether to show timestamp (default False)
     
     Returns:
         discord.Embed: Formatted embed
     """
-    embed = discord.Embed(
-        title=title,
-        description=description,
-        color=color,
-        timestamp=datetime.utcnow()
-    )
+    if show_timestamp:
+        embed = discord.Embed(
+            title=title,
+            description=description,
+            color=color,
+            timestamp=datetime.now(timezone.utc)
+        )
+    else:
+        embed = discord.Embed(
+            title=title,
+            description=description,
+            color=color
+        )
     
     # Set footer with server icon if guild provided
     if guild and guild.icon:
@@ -236,7 +245,7 @@ def create_dashboard_embed(
         title="📊 Loyalty Dashboard",
         description=f"**{guild.name}** Loyalty Statistics",
         color=Colors.SPECIAL,
-        timestamp=datetime.utcnow()
+        timestamp=datetime.now(timezone.utc)
     )
     
     # Add statistics fields
@@ -313,7 +322,7 @@ def create_leaderboard_embed(
         title=f"🏆 {title}",
         description="",
         color=Colors.SPECIAL,
-        timestamp=datetime.utcnow()
+        timestamp=datetime.now(timezone.utc)
     )
     
     # Medal emojis for top 3
@@ -381,7 +390,7 @@ def create_member_profile_embed(
         title=f"Profile: {member.display_name}",
         description="",
         color=Colors.INFO,
-        timestamp=datetime.utcnow()
+        timestamp=datetime.now(timezone.utc)
     )
     
     # Set member avatar
@@ -454,7 +463,7 @@ def create_creed_embed(
         title="🤝 Loyalty Program",
         description=creed_message + "\n\n**React with ✅ to join the loyalty program!**",
         color=Colors.SPECIAL,
-        timestamp=datetime.utcnow()
+        timestamp=datetime.now(timezone.utc)
     )
     
     # Add instructions
@@ -509,7 +518,7 @@ def create_streak_milestone_embed(
         description=f"Congratulations {member.mention}!\n"
                    f"You've reached a **{streak_days} day streak** in **{guild.name}**!",
         color=Colors.SPECIAL,
-        timestamp=datetime.utcnow()
+        timestamp=datetime.now(timezone.utc)
     )
     
     if member.avatar:
@@ -536,7 +545,7 @@ def create_backup_invite_embed(
                    f"As a loyal member, you're invited to our backup server for safety and continuity.\n\n"
                    f"**Invite Link:**\n{invite_link}",
         color=Colors.SPECIAL,
-        timestamp=datetime.utcnow()
+        timestamp=datetime.now(timezone.utc)
     )
     
     embed.add_field(
@@ -563,7 +572,7 @@ def create_setup_complete_embed(guild: discord.Guild) -> discord.Embed:
         title="✅ Setup Complete",
         description=f"Loyalty system is now active in **{guild.name}**!",
         color=Colors.SUCCESS,
-        timestamp=datetime.utcnow()
+        timestamp=datetime.now(timezone.utc)
     )
     
     embed.add_field(
@@ -594,7 +603,7 @@ def create_bulk_action_embed(
                    f"✅ Successful: {success_count}\n"
                    f"❌ Failed: {failed_count}",
         color=Colors.SUCCESS if failed_count == 0 else Colors.WARNING,
-        timestamp=datetime.utcnow()
+        timestamp=datetime.now(timezone.utc)
     )
     
     if guild.icon:
@@ -647,3 +656,646 @@ def truncate_text(text: str, max_length: int = 1024) -> str:
     if len(text) <= max_length:
         return text
     return text[:max_length - 3] + "..."
+
+# ==================== PRIME NETWORK EMBEDS ====================
+
+def create_welcome_embed(
+    guild_name: str,
+    hub_invite: str
+) -> discord.Embed:
+    """
+    Create Prime Network welcome embed for new loyal members
+    
+    Args:
+        guild_name: Gateway server name
+        hub_invite: Main Hub invite link
+    
+    Returns:
+        discord.Embed: Welcome embed with Hub invite
+    """
+    embed = discord.Embed(
+        title="🎉 Welcome to Prime Network",
+        description=f"Congratulations on joining the loyalty program in **{guild_name}**!\n\n"
+                   f"You are now part of the **Prime Network** - a community of loyal members across multiple servers.",
+        color=0x2B2D31,
+        timestamp=datetime.now(timezone.utc)
+    )
+    
+    embed.add_field(
+        name="🏢 Visit the Main Hub",
+        value=f"Connect with loyal members from across the network:\n{hub_invite}",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="✨ Your Status",
+        value="✅ Active • 📍 Origin Gateway Recorded • 🌐 Network-Wide Recognition",
+        inline=False
+    )
+    
+    embed.set_footer(text=f"{guild_name} • Prime Network")
+    
+    return embed
+
+def create_user_stats_embed(
+    member: discord.Member,
+    user_data: Dict[str, Any],
+    guild: discord.Guild
+) -> discord.Embed:
+    """
+    Create user statistics embed showing loyalty profile
+    
+    Args:
+        member: Discord member object
+        user_data: User's global loyalty data
+        guild: Current guild object
+    
+    Returns:
+        discord.Embed: User stats embed
+    """
+    embed = discord.Embed(
+        title=f"👤 Loyalty Profile: {member.display_name}",
+        description="",
+        color=0x2B2D31,
+        timestamp=datetime.now(timezone.utc)
+    )
+    
+    if member.avatar:
+        embed.set_thumbnail(url=member.avatar.url)
+    
+    # Origin Gateway
+    origin_gateway = user_data.get("origin_gateway_name", "Unknown")
+    embed.add_field(
+        name="🏠 Origin Gateway",
+        value=f"```{origin_gateway}```",
+        inline=True
+    )
+    
+    # Current Active Location
+    active_location = user_data.get("active_location_name", "None")
+    embed.add_field(
+        name="📍 Current Station",
+        value=f"```{active_location}```",
+        inline=True
+    )
+    
+    # Streak
+    streak = user_data.get("streak", 0)
+    embed.add_field(
+        name="🔥 Streak",
+        value=f"```{streak} days```",
+        inline=True
+    )
+    
+    # Total Messages
+    messages = user_data.get("total_messages", 0)
+    embed.add_field(
+        name="💬 Messages",
+        value=f"```{messages}```",
+        inline=True
+    )
+    
+    # Status
+    is_loyal = user_data.get("is_loyal", False)
+    is_muted = user_data.get("is_muted", False)
+    is_blacklisted = user_data.get("is_blacklisted", False)
+    
+    status_text = ""
+    if is_blacklisted:
+        status_text = "🚫 Blacklisted"
+    elif is_muted:
+        status_text = "🔇 Muted"
+    elif is_loyal:
+        status_text = "✅ Active"
+    else:
+        status_text = "❌ Inactive"
+    
+    embed.add_field(
+        name="🎖️ Status",
+        value=f"```{status_text}```",
+        inline=True
+    )
+    
+    # Join Date
+    opt_in_date = user_data.get("opt_in_date", "Unknown")
+    embed.add_field(
+        name="📅 Join Date",
+        value=f"```{opt_in_date}```",
+        inline=True
+    )
+    
+    embed.set_footer(text=f"{guild.name} • Prime Network")
+    
+    return embed
+
+def create_broadcast_status_embed(
+    guild: discord.Guild,
+    message_text: str,
+    sent_count: int,
+    failed_count: int,
+    is_global: bool = False
+) -> discord.Embed:
+    """
+    Create broadcast status embed showing delivery results
+    
+    Args:
+        guild: Current guild
+        message_text: Message that was broadcast
+        sent_count: Number of successful DMs
+        failed_count: Number of failed DMs
+        is_global: Whether this was a global broadcast
+    
+    Returns:
+        discord.Embed: Broadcast status embed
+    """
+    scope = "🌐 Network-Wide" if is_global else "📍 Local Gateway"
+    
+    embed = discord.Embed(
+        title=f"📢 Broadcast Complete {scope}",
+        description=f"```{truncate_text(message_text, 256)}```",
+        color=Colors.SUCCESS if failed_count == 0 else Colors.WARNING,
+        timestamp=datetime.now(timezone.utc)
+    )
+    
+    embed.add_field(
+        name="✅ Sent",
+        value=f"```{sent_count}```",
+        inline=True
+    )
+    
+    embed.add_field(
+        name="❌ Failed",
+        value=f"```{failed_count}```",
+        inline=True
+    )
+    
+    total = sent_count + failed_count
+    if total > 0:
+        success_rate = (sent_count / total) * 100
+        embed.add_field(
+            name="📊 Success Rate",
+            value=f"```{success_rate:.1f}%```",
+            inline=True
+        )
+    
+    embed.set_footer(text=f"{guild.name} • Prime Network")
+    
+    return embed
+
+def create_dashboard_embed_prime(
+    guild: discord.Guild,
+    top_users: List[Dict[str, Any]],
+    total_loyal: int
+) -> discord.Embed:
+    """
+    Create Prime Network 12-hour leaderboard dashboard
+    
+    Args:
+        guild: Gateway server
+        top_users: Top 10 users globally with rank data
+        total_loyal: Total loyal members in network
+    
+    Returns:
+        discord.Embed: Dashboard embed with medals
+    """
+    embed = discord.Embed(
+        title="🏆 Prime Network Leaderboard",
+        description=f"**Top Loyal Members** • Updated every 12 hours",
+        color=0x2B2D31,
+        timestamp=datetime.now(timezone.utc)
+    )
+    
+    medals = ["🥇", "🥈", "🥉"]
+    leaderboard_text = ""
+    
+    if not top_users:
+        leaderboard_text = "No data available yet."
+    else:
+        for idx, user_data in enumerate(top_users[:10], start=1):
+            user_id = user_data.get("user_id")
+            streak = user_data.get("streak", 0)
+            messages = user_data.get("total_messages", 0)
+            
+            # Get member from current guild or show ID
+            if user_id is not None:
+                try:
+                    member = guild.get_member(int(user_id))
+                    username = member.display_name if member else f"User {user_id}"
+                except:
+                    username = f"User {user_id}"
+            else:
+                username = "Unknown User"
+            
+            # Use medal or number
+            if idx <= 3:
+                position = medals[idx - 1]
+            else:
+                position = f"`#{idx:02d}`"
+            
+            leaderboard_text += (
+                f"{position} **{username}**\n"
+                f"└─ {messages} msgs • {streak}🔥\n"
+            )
+    
+    embed.add_field(
+        name="📊 Leaderboard",
+        value=leaderboard_text if leaderboard_text else "No data",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="🌐 Network Stats",
+        value=f"Total Loyal Members: **{total_loyal}**",
+        inline=False
+    )
+    
+    embed.set_footer(text=f"{guild.name} • Prime Network")
+    
+    return embed
+
+def create_admin_action_embed(
+    action_type: str,
+    target_user: Optional[discord.Member],
+    target_id: Optional[int],
+    reason: str = "",
+    guild: Optional[discord.Guild] = None
+) -> discord.Embed:
+    """
+    Create admin action confirmation embed
+    
+    Args:
+        action_type: Type of action (blacklist_add, blacklist_remove, mute, unmute, remove_loyalty)
+        target_user: Discord member object if available
+        target_id: User ID if member not available
+        reason: Reason for action
+        guild: Guild object for footer
+    
+    Returns:
+        discord.Embed: Admin action embed
+    """
+    # Determine action details
+    action_map = {
+        "blacklist_add": ("🚫 Added to Blacklist", Colors.ERROR),
+        "blacklist_remove": ("✅ Removed from Blacklist", Colors.SUCCESS),
+        "mute": ("🔇 Member Muted", Colors.WARNING),
+        "unmute": ("🔊 Member Unmuted", Colors.SUCCESS),
+        "remove_loyalty": ("❌ Loyalty Removed", Colors.ERROR),
+    }
+    
+    title, color = action_map.get(action_type, ("⚙️ Action Completed", Colors.INFO))
+    
+    if target_user:
+        user_text = target_user.mention
+    elif target_id:
+        user_text = f"<@{target_id}>"
+    else:
+        user_text = "Unknown User"
+    
+    embed = discord.Embed(
+        title=title,
+        description=f"**Target:** {user_text}",
+        color=color,
+        timestamp=datetime.now(timezone.utc)
+    )
+    
+    if reason:
+        embed.add_field(name="📝 Reason", value=reason, inline=False)
+    
+    if "blacklist" in action_type:
+        embed.add_field(
+            name="🌐 Scope",
+            value="Network-wide (all gateways)",
+            inline=False
+        )
+    
+    if guild:
+        embed.set_footer(text=f"{guild.name} • Prime Network")
+    else:
+        embed.set_footer(text="Prime Network")
+    
+    return embed
+
+def create_invite_status_embed(
+    guild: discord.Guild,
+    hub_invite: str,
+    sent_count: int,
+    failed_count: int
+) -> discord.Embed:
+    """
+    Create Hub invite delivery status embed
+    
+    Args:
+        guild: Current gateway
+        hub_invite: Hub invite link sent
+        sent_count: Number of invites sent
+        failed_count: Number of failures
+    
+    Returns:
+        discord.Embed: Invite status embed
+    """
+    embed = discord.Embed(
+        title="📮 Hub Invitations Sent",
+        description=f"Loyal members in **{guild.name}** have been invited to the Main Hub",
+        color=Colors.SUCCESS if failed_count == 0 else Colors.WARNING,
+        timestamp=datetime.now(timezone.utc)
+    )
+    
+    embed.add_field(
+        name="🔗 Hub Link",
+        value=hub_invite,
+        inline=False
+    )
+    
+    embed.add_field(
+        name="✅ Sent",
+        value=f"```{sent_count}```",
+        inline=True
+    )
+    
+    embed.add_field(
+        name="❌ Failed",
+        value=f"```{failed_count}```",
+        inline=True
+    )
+    
+    total = sent_count + failed_count
+    if total > 0:
+        success_rate = (sent_count / total) * 100
+        embed.add_field(
+            name="📊 Rate",
+            value=f"```{success_rate:.1f}%```",
+            inline=True
+        )
+    
+    embed.set_footer(text=f"{guild.name} • Prime Network")
+    
+    return embed
+
+# ==================== MOD COGS EMBEDS ====================
+
+def create_module_help_embed(
+    module_name: str,
+    module_emoji: str,
+    module_description: str,
+    commands_list: List[Dict[str, str]],
+    guild: Optional[discord.Guild] = None
+) -> discord.Embed:
+    """Create help embed for a module"""
+    embed = discord.Embed(
+        title=f"{module_emoji} {module_name.title()} Module",
+        description=module_description,
+        color=Colors.BASE_GRAY,
+        timestamp=datetime.now(timezone.utc)
+    )
+    
+    for cmd in commands_list:
+        embed.add_field(
+            name=f"`${cmd['name']}`",
+            value=cmd['description'],
+            inline=False
+        )
+    
+    if guild and guild.icon:
+        embed.set_footer(text=f"{guild.name} • Prime Network", icon_url=guild.icon.url)
+    else:
+        embed.set_footer(text="Prime Network")
+    
+    return embed
+
+def create_command_reference_embed(
+    command_name: str,
+    syntax: str,
+    description: str,
+    examples: List[str],
+    guild: Optional[discord.Guild] = None
+) -> discord.Embed:
+    """Create detailed command reference"""
+    embed = discord.Embed(
+        title=f"Command: {command_name}",
+        description=description,
+        color=Colors.INFO,
+        timestamp=datetime.now(timezone.utc)
+    )
+    
+    embed.add_field(
+        name="Syntax",
+        value=f"```\n{syntax}\n```",
+        inline=False
+    )
+    
+    if examples:
+        examples_text = "\n".join(f"• `{ex}`" for ex in examples)
+        embed.add_field(
+            name="Examples",
+            value=examples_text,
+            inline=False
+        )
+    
+    if guild and guild.icon:
+        embed.set_footer(text=f"{guild.name} • Prime Network", icon_url=guild.icon.url)
+    else:
+        embed.set_footer(text="Prime Network")
+    
+    return embed
+
+def create_stats_overview_embed(
+    stats: Dict[str, int],
+    guild: Optional[discord.Guild] = None
+) -> discord.Embed:
+    """Create network statistics overview"""
+    embed = discord.Embed(
+        title="📊 Network Overview",
+        description="Prime Network Statistics",
+        color=Colors.SPECIAL,
+        timestamp=datetime.now(timezone.utc)
+    )
+    
+    embed.add_field(
+        name="Gateways",
+        value=f"```{stats.get('total_guilds', 0)}```",
+        inline=True
+    )
+    
+    embed.add_field(
+        name="Total Users",
+        value=f"```{stats.get('total_users', 0)}```",
+        inline=True
+    )
+    
+    embed.add_field(
+        name="Loyal Members",
+        value=f"```{stats.get('loyal_users', 0)}```",
+        inline=True
+    )
+    
+    embed.add_field(
+        name="Blacklisted",
+        value=f"```{stats.get('blacklisted_users', 0)}```",
+        inline=True
+    )
+    
+    embed.add_field(
+        name="Trusted Admins",
+        value=f"```{stats.get('trusted_users', 0)}```",
+        inline=True
+    )
+    
+    if guild and guild.icon:
+        embed.set_footer(text=f"{guild.name} • Prime Network", icon_url=guild.icon.url)
+    else:
+        embed.set_footer(text="Prime Network")
+    
+    return embed
+
+def create_activity_stats_embed(
+    stats: Dict[str, Any],
+    guild: Optional[discord.Guild] = None
+) -> discord.Embed:
+    """Create activity statistics embed"""
+    embed = discord.Embed(
+        title="📈 Activity Statistics",
+        description="Loyalty System Activity",
+        color=Colors.INFO,
+        timestamp=datetime.now(timezone.utc)
+    )
+    
+    embed.add_field(
+        name="Total Loyal",
+        value=f"```{stats.get('total_loyal', 0)}```",
+        inline=True
+    )
+    
+    embed.add_field(
+        name="Active Today",
+        value=f"```{stats.get('active_today', 0)}```",
+        inline=True
+    )
+    
+    embed.add_field(
+        name="Activity %",
+        value=f"```{stats.get('activity_percentage', 0)}%```",
+        inline=True
+    )
+    
+    embed.add_field(
+        name="Avg Messages",
+        value=f"```{stats.get('average_messages', 0)}```",
+        inline=True
+    )
+    
+    embed.add_field(
+        name="Avg Streak",
+        value=f"```{stats.get('average_streak', 0)} days```",
+        inline=True
+    )
+    
+    if guild and guild.icon:
+        embed.set_footer(text=f"{guild.name} • Prime Network", icon_url=guild.icon.url)
+    else:
+        embed.set_footer(text="Prime Network")
+    
+    return embed
+
+def create_server_config_embed(
+    guild_name: str,
+    config: Dict[str, Any],
+    guild: Optional[discord.Guild] = None
+) -> discord.Embed:
+    """Create server configuration viewer"""
+    embed = discord.Embed(
+        title=f"⚙️ {guild_name} Configuration",
+        description="Server Settings",
+        color=Colors.BASE_GRAY,
+        timestamp=datetime.now(timezone.utc)
+    )
+    
+    # Creed message
+    creed_msg = config.get("creed_message_id")
+    embed.add_field(
+        name="Creed Message",
+        value=f"```{creed_msg if creed_msg else 'Not Set'}```",
+        inline=True
+    )
+    
+    # Loyal role
+    loyal_role = config.get("loyal_role_id")
+    embed.add_field(
+        name="Loyalty Role",
+        value=f"```{loyal_role if loyal_role else 'Not Set'}```",
+        inline=True
+    )
+    
+    # Trusted admins
+    trusted = config.get("trusted_local", [])
+    embed.add_field(
+        name="Local Trusted",
+        value=f"```{len(trusted)} admin(s)```",
+        inline=True
+    )
+    
+    # Dashboard channel
+    dashboard = config.get("dashboard_channel_id")
+    embed.add_field(
+        name="Dashboard Channel",
+        value=f"```{dashboard if dashboard else 'Not Set'}```",
+        inline=True
+    )
+    
+    # Broadcast channel
+    broadcast = config.get("broadcast_channel_id")
+    embed.add_field(
+        name="Broadcast Channel",
+        value=f"```{broadcast if broadcast else 'Not Set'}```",
+        inline=True
+    )
+    
+    # System status
+    is_hub = config.get("is_hub", False)
+    embed.add_field(
+        name="Hub Server",
+        value=f"```{'Yes ✅' if is_hub else 'No ❌'}```",
+        inline=True
+    )
+    
+    if guild and guild.icon:
+        embed.set_footer(text=f"{guild_name} • Prime Network", icon_url=guild.icon.url)
+    else:
+        embed.set_footer(text="Prime Network")
+    
+    return embed
+
+def create_trend_embed(
+    trend_data: List[Dict[str, Any]],
+    guild: Optional[discord.Guild] = None
+) -> discord.Embed:
+    """Create network join/leave trends embed"""
+    embed = discord.Embed(
+        title="📊 Network Trends",
+        description="Join/Leave Activity",
+        color=Colors.SPECIAL,
+        timestamp=datetime.now(timezone.utc)
+    )
+    
+    trend_text = "```\nDate       │ Joins │ Leaves\n"
+    trend_text += "───────────┼───────┼────────\n"
+    
+    for trend in trend_data:
+        date = trend.get("date", "Unknown")
+        joins = trend.get("joins", 0)
+        leaves = trend.get("leaves", 0)
+        trend_text += f"{date} │  {joins:3d}  │  {leaves:3d}\n"
+    
+    trend_text += "```"
+    
+    embed.add_field(
+        name="7-Day Activity",
+        value=trend_text,
+        inline=False
+    )
+    
+    if guild and guild.icon:
+        embed.set_footer(text=f"{guild.name} • Prime Network", icon_url=guild.icon.url)
+    else:
+        embed.set_footer(text="Prime Network")
+    
+    return embed
