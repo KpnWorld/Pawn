@@ -10,7 +10,7 @@ A modular Discord bot managing a hub-and-spoke loyalty network system with globa
 | Bot Owner ID | `895767962722660372` |
 | Hub Invite | `https://discord.gg/F9PB47S3FJ` |
 | Command Prefix | `$` (per-guild configurable) |
-| Embed Color | `0x2B2D31` (Dark Gray) |
+| Embed Color | `0x8acaf5` (Prime Network brand blue) |
 | Footer Format | `[Server Name] • Prime Network` |
 
 ---
@@ -96,7 +96,7 @@ A modular Discord bot managing a hub-and-spoke loyalty network system with globa
 |---------|--------|----------|
 | Send Hub Invite | `$ net invite` | Send hub invite link to loyal members in this gateway. **Cannot use in main hub.** |
 | Pick Random Members | `$ net pick <1-10>` | Select N random members from network. Returns list with IDs. |
-| Direct Message User | `$ net dm <user_id\|name> <msg>` | Send direct DM to specific user by ID or name. |
+| Direct Message User | `$ net dm <user_id|mention|name> <msg>` | Send DM to specific user. Accepts: user ID, mention `<@user>`, or name. Partial name matching supported. |
 
 ---
 
@@ -373,6 +373,68 @@ The bot tracks:
 - **Guild Stats** - Members per guild, loyalty role status
 
 View with: `$ su stats overview`, `$ su stats activity`, `$ su stats network`
+
+---
+
+## 🎨 Code Quality & Branding
+
+### Embed Color System
+All embeds use consistent **Prime Network brand color**: `0x8acaf5` (brand blue)
+- **Base/Primary**: All main embeds use brand blue
+- **Success**: Green `0x57F287` (confirmations, success messages)
+- **Error**: Red `0xED4245` (errors, failures)
+- **Info**: Blurple `0x5865F2` (general information)
+- **Warning**: Yellow `0xFEE75C` (warnings, alerts)
+
+### Input Interpreters
+
+**User ID Commands** (`$ sec ban`, `$ sec timeout`) accept:
+- User ID (e.g., `895767962722660372`)
+
+**User Lookup Commands** (`$ net dm`, `$ l user stats`) accept:
+- **User ID**: Numeric ID (e.g., `895767962722660372`)
+- **Mention**: `<@user_id>` format (e.g., `<@895767962722660372>`)
+- **Display Name**: Exact or partial name matching (case-insensitive)
+- **Username**: Discord username (case-insensitive)
+
+**Channel Commands** (`$ net guild ann`, `$ l creed`, `$ l leaderboard`) accept:
+- **Mention**: `#channel-name` (recommended)
+- **Channel ID**: Raw channel ID
+
+**Role Commands** (`$ l role`) accept:
+- **Mention**: `@role-name` (recommended)
+- **Role ID**: Raw role ID
+
+### Module Structure
+
+| Module | File | Aliases | Main Group |
+|--------|------|---------|-----------|
+| Loyalty | `cogs/loyalty.py` | `l`, `loyalty` | `$ l` |
+| Network | `cogs/network.py` | `net`, `network` | `$ net` |
+| Security | `cogs/security.py` | `sec`, `security` | `$ sec` |
+| Server | `cogs/server.py` | `s`, `server` | `$ s` |
+| Sudo (Admin) | `cogs/sudo.py` | `su`, `sudo` | `$ su` |
+
+### Subcommand Structure
+
+**Loyalty Module:**
+- `$ l user` → user stats, user leave
+- Direct: creed, leaderboard, refresh, role
+
+**Network Module:**
+- `$ net guild` → guild config, prefix, announcement
+- `$ net broadcast` → dm, global (with dm subcommand)
+- Direct: invite, pick, dm
+
+**Security Module:**
+- `$ sec trusted` → add, remove
+- Direct: ban, timeout, stop, start
+
+**Sudo Module:**
+- `$ su trusted` → remove
+- `$ su schema` → view, health
+- `$ su stats` → overview, activity, network
+- `$ su bot` → presence (switch, default), cog, cmds
 
 ---
 

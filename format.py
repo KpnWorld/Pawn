@@ -6,12 +6,12 @@ from typing import Optional, List, Dict, Any
 
 class Colors:
     """Color palette for Pawn bot embeds"""
-    BASE_GRAY = 0x2B2D31      # Discord dark gray - base color
+    BASE_GRAY = 0x8acaf5      # Prime Network brand blue - base color
     SUCCESS = 0x57F287        # Green - success messages
     ERROR = 0xED4245          # Red - error messages
     INFO = 0x5865F2           # Blurple - info messages
     WARNING = 0xFEE75C        # Yellow - warning messages
-    SPECIAL = 0xEB459E        # Pink - special UI elements
+    SPECIAL = 0x8acaf5        # Brand blue - special UI elements
 
 # ==================== BASE EMBED CREATOR ====================
 
@@ -677,7 +677,7 @@ def create_welcome_embed(
         title="🎉 Welcome to Prime Network",
         description=f"Congratulations on joining the loyalty program in **{guild_name}**!\n\n"
                    f"You are now part of the **Prime Network** - a community of loyal members across multiple servers.",
-        color=0x2B2D31,
+        color=Colors.BASE_GRAY,
         timestamp=datetime.now(timezone.utc)
     )
     
@@ -716,7 +716,7 @@ def create_user_stats_embed(
     embed = discord.Embed(
         title=f"👤 Loyalty Profile: {member.display_name}",
         description="",
-        color=0x2B2D31,
+        color=Colors.BASE_GRAY,
         timestamp=datetime.now(timezone.utc)
     )
     
@@ -861,7 +861,7 @@ def create_dashboard_embed_prime(
     embed = discord.Embed(
         title="🏆 Prime Network Leaderboard",
         description=f"**Top Loyal Members** • Updated every 12 hours",
-        color=0x2B2D31,
+        color=Colors.BASE_GRAY,
         timestamp=datetime.now(timezone.utc)
     )
     

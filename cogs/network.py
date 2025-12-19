@@ -459,22 +459,42 @@ class Network(commands.Cog):
             return
         
         try:
+            user = None
+            
+            # Try to parse as mention (<@user_id>)
+            if user_input.startswith('<@') and user_input.endswith('>'):
+                try:
+                    user_id = int(user_input[2:-1].replace('!', ''))
+                    user = await self.bot.fetch_user(user_id)
+                except:
+                    pass
+            
             # Try to parse as user ID
-            try:
-                user_id = int(user_input)
-                user = await self.bot.fetch_user(user_id)
-            except:
-                # Try to find by name
-                user = None
+            if not user:
+                try:
+                    user_id = int(user_input)
+                    user = await self.bot.fetch_user(user_id)
+                except:
+                    pass
+            
+            # Try to find by display name in current guild
+            if not user:
                 for member in ctx.guild.members:
-                    if user_input.lower() in member.name.lower():
+                    if user_input.lower() == member.display_name.lower() or user_input.lower() == member.name.lower():
+                        user = member
+                        break
+            
+            # Try partial name match
+            if not user:
+                for member in ctx.guild.members:
+                    if user_input.lower() in member.display_name.lower() or user_input.lower() in member.name.lower():
                         user = member
                         break
             
             if not user:
                 embed = create_error_embed(
                     title="User Not Found",
-                    description="Could not find user",
+                    description=f"Could not find user matching: `{user_input}`\nTry: mention, user ID, or name",
                     guild=ctx.guild
                 )
                 await ctx.send(embed=embed, delete_after=5)
@@ -483,7 +503,7 @@ class Network(commands.Cog):
             embed = discord.Embed(
                 title=f"Message from {ctx.guild.name}",
                 description=message,
-                color=0x2B2D31,
+                color=0x8acaf5,
                 timestamp=datetime.now(timezone.utc)
             )
             await user.send(embed=embed)
