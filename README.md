@@ -57,7 +57,31 @@ A modular Discord bot managing a hub-and-spoke loyalty network system with globa
 |---------|--------|----------|
 | View Guild Config | `$ net guild` | Display current server's network settings (prefix, announcement channel, trusted users) |
 | Change Prefix | `$ net guild prefix <prefix>` | Set bot prefix for this guild only (max 3 chars). Default: `$` |
-| Set Announcement Channel | `$ net guild ann <#channel>` | Broadcast announcements from main hub to this channel. |
+| Set Announcement Channel | `$ net guild ann <#channel>` | Setup channel to receive announcements from hub news channel. Channel automatically becomes read-only. Creates webhook link to source. |
+
+### Announcement Channel System
+
+**How It Works:**
+1. **Source Channel (Hardcoded):** Hub news channel (ID: 1450940467872006355) - this is where all announcements are posted
+2. **Setup Command:** Any server admin runs `$ net guild ann #channel` 
+3. **Bot Actions:**
+   - ✅ Fetches the source announcement channel from hub
+   - ✅ Makes the target channel read-only for everyone (@everyone cannot send messages)
+   - ✅ Creates Discord webhook to link target channel to source
+   - ✅ Saves channel configuration to database
+
+4. **Auto-Broadcast:** Hub admin posts in source channel → Appears in all linked gateway channels (Discord handles it)
+
+**Key Features:**
+✓ Discord native channel following (webhooks) - works 24/7 without bot  
+✓ Target channels automatically read-only (members can only view announcements)  
+✓ One-time setup: `$ net guild ann #announcements`  
+✓ Hardcoded source ensures all gateways sync from same hub channel  
+✓ Up to 10 follower channels per source (Discord limit)  
+
+**Permissions Required:**
+- Bot needs **Manage Channels** (to set read-only permissions)
+- Bot needs **Manage Webhooks** (to create follower webhook)
 
 ### Broadcasting
 
@@ -148,6 +172,32 @@ A modular Discord bot managing a hub-and-spoke loyalty network system with globa
 
 ---
 
+## 🎯 Announcement System Configuration
+
+**Hardcoded Source Channel ID:** `1450940467872006355`  
+**Location:** Hub's news/announcements channel  
+**Purpose:** All gateways follow this channel to receive announcements
+
+```
+HUB (News Channel)
+  ↓ (webhook link)
+Gateway 1 (Read-Only Channel) - receives all messages
+Gateway 2 (Read-Only Channel) - receives all messages  
+Gateway 3 (Read-Only Channel) - receives all messages
+```
+
+**Setup Command (for each gateway):**
+```
+$ net guild ann #announcements
+```
+This will:
+1. ✅ Locate source channel in hub
+2. ✅ Make target channel read-only (@everyone blocked)
+3. ✅ Create webhook follower link
+4. ✅ Save configuration
+
+---
+
 ## 💾 Database Schema
 
 File: `loyalty_data.json`
@@ -180,6 +230,7 @@ File: `loyalty_data.json`
             "is_hub": false,
             "prefix": "$",
             "announcement_channel": null,
+            "hub_ann_channel_id": null,
             "broadcast_channel": null,
             "loyal_role_id": null,
             "creed_message_id": null,

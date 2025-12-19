@@ -121,6 +121,7 @@ def get_guild_data(guild_id: int) -> Dict[str, Any]:
             "creed_message_id": None,
             "dashboard_msg_id": None,
             "dashboard_channel_id": None,
+            "hub_ann_channel_id": None,
             "trusted_local": []
         }
         save_data()

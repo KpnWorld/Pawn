@@ -117,7 +117,7 @@ class Network(commands.Cog):
     
     @guild_group.command(name='ann', aliases=['announcement'])
     async def set_announcement(self, ctx, channel: discord.TextChannel):
-        """Set announcement channel"""
+        """Setup announcement channel to receive from hub news channel"""
         if not ctx.author.guild_permissions.administrator and not bot_module.is_trusted(ctx.author.id):
             embed = create_error_embed(
                 title="Permission Denied",
@@ -127,16 +127,101 @@ class Network(commands.Cog):
             await ctx.send(embed=embed, delete_after=5)
             return
         
-        guild_data = bot_module.get_guild_data(ctx.guild.id)
-        guild_data["announcement_channel"] = channel.id
-        bot_module.save_data()
+        try:
+            # Hardcoded source announcement channel
+            SOURCE_CHANNEL_ID = 1450940467872006355
+            
+            # Get the source channel from main hub
+            main_hub = self.bot.get_guild(bot_module.MAIN_HUB_ID)
+            if not main_hub:
+                embed = create_error_embed(
+                    title="Hub Not Found",
+                    description="Cannot find main hub server",
+                    guild=ctx.guild
+                )
+                await ctx.send(embed=embed, delete_after=5)
+                return
+            
+            source_channel = main_hub.get_channel(SOURCE_CHANNEL_ID)
+            if not source_channel:
+                embed = create_error_embed(
+                    title="Source Channel Not Found",
+                    description=f"Cannot access source announcement channel (ID: {SOURCE_CHANNEL_ID})",
+                    guild=ctx.guild
+                )
+                await ctx.send(embed=embed, delete_after=5)
+                return
+            
+            # Verify source channel is a text channel
+            if not isinstance(source_channel, discord.TextChannel):
+                embed = create_error_embed(
+                    title="Invalid Channel Type",
+                    description=f"Source channel must be a text channel, not {source_channel.type}",
+                    guild=ctx.guild
+                )
+                await ctx.send(embed=embed, delete_after=5)
+                return
+            
+            # Make target channel read-only for @everyone
+            try:
+                everyone_role = ctx.guild.default_role
+                await channel.set_permissions(
+                    everyone_role,
+                    send_messages=False,
+                    add_reactions=False,
+                    manage_messages=False
+                )
+            except discord.Forbidden:
+                embed = create_error_embed(
+                    title="Permission Error",
+                    description="Cannot set channel permissions. Ensure bot has 'Manage Channels' permission.",
+                    guild=ctx.guild
+                )
+                await ctx.send(embed=embed, delete_after=5)
+                return
+            
+            # Make target channel follow source channel (Discord API)
+            try:
+                webhook = await source_channel.follow(destination=channel)
+                
+                # Save to guild data
+                guild_data = bot_module.get_guild_data(ctx.guild.id)
+                guild_data["announcement_channel"] = channel.id
+                guild_data["hub_ann_channel_id"] = SOURCE_CHANNEL_ID
+                bot_module.save_data()
+                
+                embed = create_success_embed(
+                    title="Announcement Channel Setup Complete",
+                    description=f"✅ {channel.mention} is now following announcements from hub\n"
+                               f"🔒 Channel set to read-only for all members\n"
+                               f"📢 Will automatically receive messages from news channel",
+                    guild=ctx.guild
+                )
+                await ctx.send(embed=embed)
+            
+            except discord.Forbidden:
+                embed = create_error_embed(
+                    title="Permission Error",
+                    description="Bot doesn't have permission to follow that channel.\n"
+                               "Ensure bot has 'Manage Webhooks' permission.",
+                    guild=ctx.guild
+                )
+                await ctx.send(embed=embed, delete_after=5)
+            except discord.HTTPException as e:
+                embed = create_error_embed(
+                    title="Discord API Error",
+                    description=f"Failed to create webhook: {str(e)}",
+                    guild=ctx.guild
+                )
+                await ctx.send(embed=embed, delete_after=5)
         
-        embed = create_success_embed(
-            title="Announcement Channel Set",
-            description=f"Announcements will go to {channel.mention}",
-            guild=ctx.guild
-        )
-        await ctx.send(embed=embed)
+        except Exception as e:
+            embed = create_error_embed(
+                title="Error",
+                description=f"Failed to setup announcement channel: {str(e)}",
+                guild=ctx.guild
+            )
+            await ctx.send(embed=embed, delete_after=5)
     
     @commands.group(name='broadcast', aliases=['bc'])
     @commands.has_permissions(administrator=True)
