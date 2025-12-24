@@ -1,15 +1,13 @@
-import discord
-import json
-import os
 from flask import Flask
 from threading import Thread
+import discord
 from discord.ext import commands, tasks
-from discord import app_commands
+from discord import app_commands, TextChannel, VoiceChannel, Thread as DiscordThread
+import json
+import os
 from datetime import datetime, timedelta, timezone
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Union
 from dotenv import load_dotenv
-import asyncio
-
 load_dotenv()
 
 from format import (
@@ -17,9 +15,21 @@ from format import (
     create_success_embed,
     create_error_embed,
     create_info_embed,
-    create_module_help_embed,
-    create_command_reference_embed
+    create_warning_embed,
+    create_dashboard_embed,
+    create_leaderboard_embed
 )
+
+# ==================== CORE CONFIGURATION ====================
+# These variables are used across all cogs
+
+MAIN_HUB_ID = 1449199091937443965  # quarterzip
+MAIN_HUB_NAME = "quarterzip"
+BOT_OWNER_ID = 895767962722660372
+HUB_INVITE = "https://discord.gg/F9PB47S3FJ"
+HUB_ANN_CHANNEL_ID = 1451697918493855797  # Prime Network announcements channel
+BRAND_COLOR = 0x8acaf5  # Special Prime Network blue - ONLY COLOR USED
+STREAK_MESSAGE_THRESHOLD = 100  # Messages needed to gain 1 streak day
 
 # Bot Configuration
 intents = discord.Intents.default()
@@ -28,143 +38,173 @@ intents.guilds = True
 intents.members = True
 intents.message_content = True
 
-bot = commands.Bot(command_prefix="$", intents=intents, help_command=None)
+def get_prefix(bot, message):
+    """Get custom prefix for guild"""
+    if not message.guild:
+        return '$'
+    guild_id_str = str(message.guild.id)
+    if guild_id_str in DATA.get("guilds", {}) and "prefix" in DATA["guilds"][guild_id_str]:
+        return DATA["guilds"][guild_id_str]["prefix"]
+    return '$'
+
+bot = commands.Bot(command_prefix=get_prefix, intents=intents)
 
 # Data Storage
 DATA_FILE = 'loyalty_data.json'
 DATA: Dict[str, Any] = {}
 
-# Constants
-MAIN_HUB_ID = 1449199091937443965
-MAIN_HUB_INVITE = "https://discord.gg/F9PB47S3FJ"
-BOT_OWNER_ID = 895767962722660372
-
 # ==================== DATA MANAGEMENT ====================
 
 def load_data():
-    """Load loyalty data from JSON file"""
+    """Load network data from JSON file"""
     global DATA
     if os.path.exists(DATA_FILE):
-        try:
-            with open(DATA_FILE, 'r') as f:
-                DATA = json.load(f)
-        except json.JSONDecodeError:
-            print(f"Warning: {DATA_FILE} is corrupted, initializing with defaults")
-            DATA = initialize_data()
+        with open(DATA_FILE, 'r') as f:
+            DATA = json.load(f)
     else:
-        DATA = initialize_data()
-
-def initialize_data() -> Dict[str, Any]:
-    """Initialize default data structure"""
-    return {
-        "network_config": {
-            "main_hub_id": MAIN_HUB_ID,
-            "main_hub_invite": MAIN_HUB_INVITE,
-            "system_active": True,
-            "trusted_users": [BOT_OWNER_ID]
-        },
-        "global_blacklist": [],
-        "global_users": {},
-        "guilds": {},
-        "stats": {
-            "daily_joins": {},
-            "daily_leaves": {},
-            "activity_snapshots": {}
-        }
-    }
-
-def save_data():
-    """Save loyalty data to JSON file"""
-    try:
-        with open(DATA_FILE, 'w') as f:
-            json.dump(DATA, f, indent=4)
-    except Exception as e:
-        print(f"Error saving data: {e}")
-
-def get_user_data(user_id: int) -> Dict[str, Any]:
-    """Get or create global user profile"""
-    # Ensure global_users key exists
-    if "global_users" not in DATA:
-        DATA["global_users"] = {}
-    
-    user_id_str = str(user_id)
-    if user_id_str not in DATA["global_users"]:
-        DATA["global_users"][user_id_str] = {
-            "is_loyal": False,
-            "streak": 0,
-            "total_messages": 0,
-            "last_activity": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
-            "opt_in_date": None,
-            "origin_gateway_id": None,
-            "origin_gateway_name": None,
-            "active_location_id": None,
-            "is_muted": False
+        DATA = {
+            "network_config": {
+                "main_hub_id": MAIN_HUB_ID,
+                "main_hub_name": MAIN_HUB_NAME,
+                "main_hub_invite": HUB_INVITE,
+                "hub_ann_channel_id": HUB_ANN_CHANNEL_ID,
+                "system_active": True,
+                "trusted_users": [BOT_OWNER_ID]
+            },
+            "global_blacklist": [],
+            "global_users": {},
+            "guilds": {},
+            "stats": {
+                "daily_joins": {},
+                "daily_leaves": {},
+                "activity_snapshots": {}
+            }
         }
         save_data()
-    return DATA["global_users"][user_id_str]
+
+def save_data():
+    """Save network data to JSON file"""
+    with open(DATA_FILE, 'w') as f:
+        json.dump(DATA, f, indent=4)
 
 def get_guild_data(guild_id: int) -> Dict[str, Any]:
-    """Get or create guild config"""
-    # Ensure guilds key exists
-    if "guilds" not in DATA:
-        DATA["guilds"] = {}
-    
+    """Get or create guild data structure"""
     guild_id_str = str(guild_id)
     if guild_id_str not in DATA["guilds"]:
+        guild = bot.get_guild(guild_id)
         DATA["guilds"][guild_id_str] = {
-            "name": "Unknown",
+            "name": guild.name if guild else "Unknown",
             "is_hub": guild_id == MAIN_HUB_ID,
             "prefix": "$",
             "announcement_channel": None,
+            "hub_ann_channel_id": HUB_ANN_CHANNEL_ID,
             "broadcast_channel": None,
             "loyal_role_id": None,
             "creed_message_id": None,
+            "creed_channel_id": None,
             "dashboard_msg_id": None,
             "dashboard_channel_id": None,
-            "hub_ann_channel_id": None,
             "trusted_local": []
         }
         save_data()
     return DATA["guilds"][guild_id_str]
 
-def is_trusted(user_id: int) -> bool:
-    """Check if user is globally trusted"""
-    if "network_config" not in DATA or "trusted_users" not in DATA["network_config"]:
-        return False
-    return user_id in DATA["network_config"]["trusted_users"]
-
-def is_blacklisted(user_id: int) -> bool:
-    """Check if user is globally blacklisted"""
-    if "global_blacklist" not in DATA:
-        return False
-    return user_id in DATA["global_blacklist"]
-
-def is_muted(user_id: int) -> bool:
-    """Check if user is globally muted"""
-    user_data = get_user_data(user_id)
-    return user_data.get("is_muted", False)
+def get_user_data(user_id: int) -> Dict[str, Any]:
+    """Get or create user data structure"""
+    user_id_str = str(user_id)
+    if user_id_str not in DATA["global_users"]:
+        DATA["global_users"][user_id_str] = {
+            "is_loyal": False,
+            "is_inactive": False,
+            "streak": 0,
+            "total_messages": 0,
+            "messages_since_last_streak": 0,
+            "last_activity": None,
+            "opt_in_date": None,
+            "origin_gateway_id": None,
+            "origin_gateway_name": None,
+            "main_server_id": None,
+            "main_server_name": None,
+            "is_muted": False
+        }
+        save_data()
+    return DATA["global_users"][user_id_str]
 
 def is_system_active() -> bool:
     """Check if loyalty system is active"""
-    return DATA["network_config"].get("system_active", True)
+    return DATA.get("network_config", {}).get("system_active", True)
 
-def update_activity(user_id: int, guild_id: int, guild_name: str):
-    """Update user activity timestamp and message count"""
+def is_trusted_user(user_id: int) -> bool:
+    """Check if user is in trusted list"""
+    return user_id in DATA.get("network_config", {}).get("trusted_users", [])
+
+def is_owner(user_id: int) -> bool:
+    """Check if user is bot owner"""
+    return user_id == BOT_OWNER_ID
+
+def get_loyal_member_count() -> int:
+    """Get total count of loyal members across network"""
+    return sum(1 for user in DATA.get("global_users", {}).values() if user.get("is_loyal", False))
+
+def get_active_loyal_count() -> int:
+    """Get count of active (non-inactive) loyal members"""
+    return sum(1 for user in DATA.get("global_users", {}).values() 
+               if user.get("is_loyal", False) and not user.get("is_inactive", False))
+
+def update_user_activity(user_id: int, guild_id: int):
+    """Update user's activity, location, and streak"""
     user_data = get_user_data(user_id)
-    user_data["last_activity"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    user_data["active_location_id"] = guild_id
-    user_data["total_messages"] = user_data.get("total_messages", 0) + 1
+    today = datetime.now().strftime("%Y-%m-%d")
+    
+    # Update activity
+    user_data["last_activity"] = today
+    user_data["total_messages"] += 1
+    user_data["messages_since_last_streak"] = user_data.get("messages_since_last_streak", 0) + 1
+    
+    # Mark as active if they were inactive
+    if user_data.get("is_inactive", False):
+        user_data["is_inactive"] = False
+    
+    # Track main server (most active server)
+    guild = bot.get_guild(guild_id)
+    if guild:
+        current_main = user_data.get("main_server_id")
+        if current_main != guild_id:
+            # Update main server to current location
+            user_data["main_server_id"] = guild_id
+            user_data["main_server_name"] = guild.name
+    
+    # Streak system: Gain 1 streak day per 100 messages
+    if user_data.get("is_loyal", False):
+        if user_data["messages_since_last_streak"] >= STREAK_MESSAGE_THRESHOLD:
+            user_data["streak"] = user_data.get("streak", 0) + 1
+            user_data["messages_since_last_streak"] = 0
+    
     save_data()
 
-def get_loyal_count() -> int:
-    """Get total count of loyal users globally"""
-    return sum(1 for u in DATA["global_users"].values() if u.get("is_loyal", False))
-
-def get_guild_member_count(guild: discord.Guild) -> int:
-    """Get member count excluding bots"""
-    return sum(1 for m in guild.members if not m.bot)
+def check_user_in_hub(user_id: int) -> bool:
+    """Check if user is in the main hub server"""
+    hub = bot.get_guild(MAIN_HUB_ID)
+    if not hub:
+        return False
+    return hub.get_member(user_id) is not None
 
 # ==================== BOT EVENTS ====================
+
+@bot.event
+async def on_member_join(member):
+    """Handle member joining - check blacklist"""
+    if member.bot:
+        return
+    
+    # Check if user is blacklisted
+    user_id_str = str(member.id)
+    if user_id_str in DATA.get("global_blacklist", []):
+        try:
+            await member.guild.ban(member, reason="Global blacklist - Auto-ban on join")
+            print(f"Auto-banned blacklisted user {member.id} from {member.guild.name}")
+        except:
+            print(f"Failed to auto-ban {member.id} from {member.guild.name}")
 
 @bot.event
 async def on_ready():
@@ -173,6 +213,8 @@ async def on_ready():
     bot_name = bot.user.name if bot.user else "Bot"
     print(f'{bot_name} has connected to Discord!')
     print(f'Connected to {len(bot.guilds)} guilds')
+    print(f'Loyal members: {get_loyal_member_count()}')
+    print(f'Active loyal members: {get_active_loyal_count()}')
     
     try:
         synced = await bot.tree.sync()
@@ -180,8 +222,49 @@ async def on_ready():
     except Exception as e:
         print(f'Failed to sync commands: {e}')
     
+    # Load cogs
+    try:
+        await bot.load_extension('cogs.loyalty')
+        print('✅ Loyalty module loaded')
+    except Exception as e:
+        print(f'❌ Failed to load Loyalty: {e}')
+    
+    try:
+        await bot.load_extension('cogs.network')
+        print('✅ Network module loaded')
+    except Exception as e:
+        print(f'❌ Failed to load Network: {e}')
+    
+    try:
+        await bot.load_extension('cogs.security')
+        print('✅ Security module loaded')
+    except Exception as e:
+        print(f'❌ Failed to load Security: {e}')
+    
+    try:
+        await bot.load_extension('cogs.server')
+        print('✅ Server module loaded')
+    except Exception as e:
+        print(f'❌ Failed to load Server: {e}')
+    
+    try:
+        await bot.load_extension('cogs.sudo')
+        print('✅ Sudo module loaded')
+    except Exception as e:
+        print(f'❌ Failed to load Sudo: {e}')
+    
+    # Start background tasks
     update_presence.start()
     update_dashboard.start()
+    check_inactive_users.start()
+
+@bot.event
+async def on_guild_join(guild):
+    """Handle bot joining a new guild"""
+    guild_data = get_guild_data(guild.id)
+    guild_data["name"] = guild.name
+    save_data()
+    print(f'Joined guild: {guild.name} ({guild.id})')
 
 @bot.event
 async def on_message(message):
@@ -189,55 +272,104 @@ async def on_message(message):
     if message.author.bot:
         return
     
-    # Check if system is active
-    if not is_system_active():
-        await bot.process_commands(message)
-        return
-    
-    # Check blacklist
-    if is_blacklisted(message.author.id):
-        try:
-            await message.delete()
-        except:
-            pass
-        return
-    
-    # Check mute - auto-delete
-    if is_muted(message.author.id):
-        try:
-            await message.delete()
-        except:
-            pass
-        return
-    
-    # Bot mention response - show status
+    # Bot mention responses
     if bot.user and bot.user.mentioned_in(message) and len(message.mentions) == 1:
-        guild_count = len(bot.guilds)
-        total_members = sum(get_guild_member_count(g) for g in bot.guilds)
-        loyal_count = get_loyal_count()
+        content_lower = message.content.lower().strip()
         
-        embed = create_info_embed(
-            title="Prime Network Status",
-            description=f"**Gateways:** {guild_count}\n**Total Members:** {total_members}\n**Loyal Members:** {loyal_count}",
-            guild=message.guild
-        )
-        await message.channel.send(embed=embed)
-        return
+        # @bot help - Show all modules
+        if 'help' in content_lower:
+            prefix = get_prefix(bot, message)
+            embed = discord.Embed(
+                title="🌐 Pawn - Prime Network Bot",
+                description=f"**Prefix:** `{prefix}` (customizable per server)\n\n"
+                           f"**Available Modules:**\n"
+                           f"`{prefix}l` - Loyalty (creed, roles, leaderboards)\n"
+                           f"`{prefix}net` - Network (broadcasts, invites, config)\n"
+                           f"`{prefix}sec` - Security (bans, timeouts, system control)\n"
+                           f"`{prefix}s` - Server (management, gate controls)\n"
+                           f"`{prefix}su` - Sudo (owner-only admin tools)\n\n"
+                           f"*Use `{prefix}<module>` to see module commands*",
+                color=BRAND_COLOR
+            )
+            if message.guild and message.guild.icon:
+                embed.set_footer(text=f"{message.guild.name} • Prime Network", icon_url=message.guild.icon.url)
+            else:
+                embed.set_footer(text="Prime Network")
+            await message.channel.send(embed=embed)
+            return
+        
+        # @bot count - Member count (exclude bots)
+        if 'count' in content_lower:
+            if not message.guild:
+                return
+            
+            total_members = message.guild.member_count or 0
+            bot_count = sum(1 for member in message.guild.members if member.bot)
+            human_count = total_members - bot_count
+            
+            if 'member' in content_lower or 'human' in content_lower:
+                embed = discord.Embed(
+                    title="👥 Member Count",
+                    description=f"**Human Members:** {human_count}",
+                    color=BRAND_COLOR
+                )
+            elif 'bot' in content_lower:
+                embed = discord.Embed(
+                    title="🤖 Bot Count",
+                    description=f"**Bots:** {bot_count}",
+                    color=BRAND_COLOR
+                )
+            else:
+                embed = discord.Embed(
+                    title="📊 Server Count",
+                    description=f"**Total Members:** {total_members}\n"
+                               f"**Humans:** {human_count}\n"
+                               f"**Bots:** {bot_count}",
+                    color=BRAND_COLOR
+                )
+            
+            if message.guild.icon:
+                embed.set_footer(text=f"{message.guild.name} • Prime Network", icon_url=message.guild.icon.url)
+            else:
+                embed.set_footer(text="Prime Network")
+            await message.channel.send(embed=embed)
+            return
+        
+        # Default @bot - Show stats
+        if message.guild:
+            guild_data = get_guild_data(message.guild.id)
+            loyal_in_guild = sum(1 for uid, user in DATA.get("global_users", {}).items() 
+                                if user.get("is_loyal") and user.get("main_server_id") == message.guild.id)
+            
+            embed = discord.Embed(
+                title=f"📊 {message.guild.name}",
+                description=f"**Members:** {message.guild.member_count or 0}\n"
+                           f"**Loyal (Main Server):** {loyal_in_guild}\n"
+                           f"**Network Loyal:** {get_loyal_member_count()}\n"
+                           f"**Active Loyal:** {get_active_loyal_count()}\n"
+                           f"**Status:** {'🏢 Main Hub' if guild_data.get('is_hub') else '🌐 Gateway'}",
+                color=BRAND_COLOR
+            )
+            if message.guild.icon:
+                embed.set_footer(text=f"{message.guild.name} • Prime Network", icon_url=message.guild.icon.url)
+            else:
+                embed.set_footer(text="Prime Network")
+            await message.channel.send(embed=embed)
+            return
     
-    # Track activity
+    # Track user activity
     if message.guild:
-        update_activity(message.author.id, message.guild.id, message.guild.name)
+        update_user_activity(message.author.id, message.guild.id)
     
     await bot.process_commands(message)
 
 @bot.event
 async def on_raw_reaction_add(payload):
-    """Handle opt-in reactions to creed message"""
-    if payload.user_id == (bot.user.id if bot.user else 0):
+    """Handle creed message reactions for loyalty opt-in"""
+    if not bot.user or payload.user_id == bot.user.id:
         return
     
-    # Check blacklist
-    if is_blacklisted(payload.user_id):
+    if not payload.guild_id:
         return
     
     guild = bot.get_guild(payload.guild_id)
@@ -246,257 +378,229 @@ async def on_raw_reaction_add(payload):
     
     guild_data = get_guild_data(guild.id)
     
-    # Check if this is the creed message
-    if guild_data["creed_message_id"] != payload.message_id:
-        return
-    
-    member = guild.get_member(payload.user_id)
-    if not member:
-        return
-    
-    # Get or create user profile
-    user_data = get_user_data(payload.user_id)
-    
-    # Set origin if new user
-    if user_data["origin_gateway_id"] is None:
+    # Check if reaction is on creed message
+    if guild_data.get("creed_message_id") == payload.message_id and str(payload.emoji) == "✅":
+        member = guild.get_member(payload.user_id)
+        if not member:
+            return
+        
+        user_data = get_user_data(payload.user_id)
+        today = datetime.now().strftime("%Y-%m-%d")
+        
+        # Mark as loyal
+        user_data["is_loyal"] = True
+        user_data["is_inactive"] = False
+        user_data["opt_in_date"] = today
+        user_data["last_activity"] = today
         user_data["origin_gateway_id"] = guild.id
         user_data["origin_gateway_name"] = guild.name
-    
-    # Mark as loyal
-    user_data["is_loyal"] = True
-    if user_data["opt_in_date"] is None:
-        user_data["opt_in_date"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    
-    # Grant local loyalty role
-    if guild_data["loyal_role_id"]:
-        try:
+        user_data["main_server_id"] = guild.id
+        user_data["main_server_name"] = guild.name
+        user_data["streak"] = 0
+        user_data["messages_since_last_streak"] = 0
+        
+        # Update stats
+        if today not in DATA["stats"]["daily_joins"]:
+            DATA["stats"]["daily_joins"][today] = 0
+        DATA["stats"]["daily_joins"][today] += 1
+        
+        save_data()
+        
+        # Assign loyalty role
+        if guild_data.get("loyal_role_id"):
             role = guild.get_role(guild_data["loyal_role_id"])
             if role:
-                await member.add_roles(role)
+                try:
+                    await member.add_roles(role)
+                except:
+                    pass
+        
+        # Send welcome DM
+        try:
+            in_hub = check_user_in_hub(member.id)
+            hub_text = "\n✅ You're already in the main hub!" if in_hub else f"\n📨 Watch for invites to join **{MAIN_HUB_NAME}** (main hub)"
+            
+            embed = discord.Embed(
+                title="✅ Welcome to Prime Network!",
+                description=f"You've joined the loyalty program in **{guild.name}**.\n\n"
+                           f"**What's Next:**\n"
+                           f"• Stay active to build your streak (1 day per 100 messages)\n"
+                           f"• Your loyalty status is tracked network-wide\n"
+                           f"• You'll receive network announcements{hub_text}\n\n"
+                           f"**Powered by Pawn Bot**",
+                color=BRAND_COLOR
+            )
+            if guild.icon:
+                embed.set_footer(text=f"{guild.name} • Prime Network", icon_url=guild.icon.url)
+            else:
+                embed.set_footer(text="Prime Network")
+            await member.send(embed=embed)
         except:
             pass
-    
-    save_data()
-    
-    # Send welcome DM
-    try:
-        embed = create_info_embed(
-            title="🎉 Welcome to Prime Network",
-            description=f"You've joined the loyalty program in **{guild.name}**!\n\nVisit the Main Hub: {MAIN_HUB_INVITE}",
-            guild=guild
-        )
-        await member.send(embed=embed)
-    except:
-        pass
 
 # ==================== BACKGROUND TASKS ====================
 
 @tasks.loop(minutes=5)
 async def update_presence():
     """Update bot presence with loyal member count"""
-    try:
-        count = get_loyal_count()
-        activity = discord.Streaming(
-            name=f"{count} loyal members",
-            url="https://twitch.tv/pawnbot"
-        )
-        await bot.change_presence(activity=activity)
-    except Exception as e:
-        print(f"Error updating presence: {e}")
+    count = get_loyal_member_count()
+    activity = discord.Streaming(
+        name=f"{count} loyal members",
+        url="https://twitch.tv/pawnbot"
+    )
+    await bot.change_presence(activity=activity)
 
 @tasks.loop(hours=4)
 async def update_dashboard():
-    """Update dashboard every 4 hours - localized per gateway"""
-    if not is_system_active():
-        return
-    
-    try:
-        # Get top 10 loyal users globally
-        top_users = []
-        loyal_users = [
-            (uid, u) for uid, u in DATA["global_users"].items()
-            if u.get("is_loyal", False)
-        ]
-        sorted_users = sorted(loyal_users, key=lambda x: x[1].get("streak", 0), reverse=True)
-        top_users = sorted_users[:10]
+    """Update leaderboard dashboards in all guilds"""
+    for guild_id_str, guild_data in DATA.get("guilds", {}).items():
+        guild_id = int(guild_id_str)
+        guild = bot.get_guild(guild_id)
+        if not guild:
+            continue
         
-        # Update dashboard in each gateway
-        for guild_id_str, guild_config in DATA.get("guilds", {}).items():
-            guild_id = int(guild_id_str)
-            guild = bot.get_guild(guild_id)
-            if not guild:
-                continue
-            
-            channel_id = guild_config.get("dashboard_channel_id")
-            if not channel_id:
-                continue
-            
-            channel = guild.get_channel(int(channel_id))
-            if not channel or not isinstance(channel, discord.TextChannel):
-                continue
-            
-            # Create dashboard embed
-            medals = ["🥇", "🥈", "🥉"]
-            leaderboard_text = ""
-            
-            for idx, (user_id_str, user_data) in enumerate(top_users[:10], 1):
-                member = guild.get_member(int(user_id_str))
-                username = member.display_name if member else f"User {user_id_str}"
-                
-                if idx <= 3:
-                    position = medals[idx - 1]
-                else:
-                    position = f"`#{idx:02d}`"
-                
-                streak = user_data.get("streak", 0)
-                messages = user_data.get("total_messages", 0)
-                leaderboard_text += f"{position} **{username}**\n└─ {messages} msgs • {streak}🔥\n"
-            
-            if not leaderboard_text:
-                leaderboard_text = "No data available yet."
-            
-            embed = discord.Embed(
-                title="🏆 Prime Network Leaderboard",
-                description=leaderboard_text,
-                color=0x2B2D31,
-                timestamp=datetime.now(timezone.utc)
-            )
-            
-            if guild.icon:
-                embed.set_footer(text=f"{guild.name} • Prime Network", icon_url=guild.icon.url)
-            else:
-                embed.set_footer(text=f"{guild.name} • Prime Network")
-            
-            try:
-                msg_id = guild_config.get("dashboard_msg_id")
-                if msg_id:
-                    try:
-                        msg = await channel.fetch_message(int(msg_id))
-                        await msg.edit(embed=embed)
-                    except discord.NotFound:
-                        msg = await channel.send(embed=embed)
-                        guild_config["dashboard_msg_id"] = msg.id
-                        save_data()
-                else:
-                    msg = await channel.send(embed=embed)
-                    guild_config["dashboard_msg_id"] = msg.id
-                    save_data()
-            except Exception as e:
-                print(f"Error updating dashboard in {guild.name}: {e}")
-    except Exception as e:
-        print(f"Error in update_dashboard: {e}")
-
-# ==================== HELP COMMAND ====================
-
-MODULE_INFO = {
-    "loyalty": {"emoji": "🎖️", "description": "Manage creed, leaderboards, and loyalty roles"},
-    "network": {"emoji": "🌐", "description": "Control global network broadcasting and invites"},
-    "security": {"emoji": "🔒", "description": "Network security, bans, timeouts, and system control"},
-    "server": {"emoji": "🏢", "description": "Server configuration and management"},
-    "sudo": {"emoji": "⚙️", "description": "Bot owner utilities and system diagnostics"}
-}
-
-@bot.command(name='help')
-async def help_command(ctx):
-    """Show all available modules"""
-    embed = discord.Embed(
-        title="📚 Prime Network Bot Help",
-        description="Choose a module to learn more",
-        color=0x2B2D31,
-        timestamp=datetime.now(timezone.utc)
-    )
-    
-    for module, info in MODULE_INFO.items():
-        embed.add_field(
-            name=f"{info['emoji']} {module.title()}",
-            value=f"{info['description']}\n`$ {module}`",
-            inline=False
+        dashboard_channel_id = guild_data.get("dashboard_channel_id")
+        dashboard_msg_id = guild_data.get("dashboard_msg_id")
+        
+        if not dashboard_channel_id:
+            continue
+        
+        channel = guild.get_channel(dashboard_channel_id)
+        if not channel or not isinstance(channel, (TextChannel, VoiceChannel, DiscordThread)):
+            continue
+        
+        # Get top 10 loyal members by streak
+        loyal_members = []
+        for user_id_str, user_data in DATA.get("global_users", {}).items():
+            if user_data.get("is_loyal") and not user_data.get("is_inactive", False):
+                loyal_members.append({
+                    "user_id": int(user_id_str),
+                    "messages": user_data.get("total_messages", 0),
+                    "streak": user_data.get("streak", 0)
+                })
+        
+        loyal_members.sort(key=lambda x: (x["streak"], x["messages"]), reverse=True)
+        top_10 = loyal_members[:10]
+        
+        embed = create_leaderboard_embed(
+            title="Top 10 Loyal Members",
+            members=top_10,
+            guild=guild
         )
+        
+        try:
+            if dashboard_msg_id:
+                try:
+                    msg = await channel.fetch_message(dashboard_msg_id)
+                    await msg.edit(embed=embed)
+                except:
+                    msg = await channel.send(embed=embed)
+                    guild_data["dashboard_msg_id"] = msg.id
+                    save_data()
+            else:
+                msg = await channel.send(embed=embed)
+                guild_data["dashboard_msg_id"] = msg.id
+                save_data()
+        except:
+            pass
+
+@tasks.loop(hours=24)
+async def check_inactive_users():
+    """Check for inactive users and mark them"""
+    current_time = datetime.now()
     
-    if ctx.guild and ctx.guild.icon:
-        embed.set_footer(text=f"{ctx.guild.name} • Prime Network", icon_url=ctx.guild.icon.url)
-    else:
-        embed.set_footer(text="Prime Network")
+    for user_id_str, user_data in DATA.get("global_users", {}).items():
+        if not user_data.get("is_loyal", False):
+            continue
+        
+        last_activity = user_data.get("last_activity")
+        if not last_activity:
+            continue
+        
+        try:
+            last_active_date = datetime.strptime(last_activity, "%Y-%m-%d")
+            days_inactive = (current_time - last_active_date).days
+            
+            # Mark as inactive if no activity for 7+ days
+            if days_inactive >= 7:
+                if not user_data.get("is_inactive", False):
+                    user_data["is_inactive"] = True
+                    print(f"Marked user {user_id_str} as inactive ({days_inactive} days)")
+        except:
+            pass
     
-    await ctx.send(embed=embed)
+    save_data()
 
-@bot.command(name='count')
-async def count_command(ctx):
-    """Show member count excluding bots"""
-    if not ctx.guild:
-        await ctx.send("This command can only be used in a server.")
-        return
-    
-    member_count = get_guild_member_count(ctx.guild)
-    embed = create_info_embed(
-        title="Member Count",
-        description=f"**{ctx.guild.name}** has **{member_count}** members (excluding bots)",
-        guild=ctx.guild
-    )
-    await ctx.send(embed=embed)
-
-# ==================== COG LOADER ====================
-
-async def load_cogs():
-    """Load all cogs from cogs directory"""
-    cogs_dir = "cogs"
-    if not os.path.exists(cogs_dir):
-        os.makedirs(cogs_dir)
-    
-    for filename in os.listdir(cogs_dir):
-        if filename.endswith(".py") and not filename.startswith("_"):
-            try:
-                await bot.load_extension(f"cogs.{filename[:-3]}")
-                print(f"Loaded cog: {filename[:-3]}")
-            except Exception as e:
-                print(f"Error loading cog {filename[:-3]}: {e}")
-
-@bot.event
-async def setup_hook():
-    """Called when bot is loading"""
-    await load_cogs()
-
-# ==================== ERROR HANDLING ====================
+# ==================== COMMAND ERROR HANDLER ====================
 
 @bot.event
 async def on_command_error(ctx, error):
     """Global error handler"""
     if isinstance(error, commands.MissingPermissions):
-        embed = create_error_embed(
-            title="Permission Denied",
+        embed = discord.Embed(
+            title="❌ Permission Denied",
             description="You don't have permission to use this command.",
-            guild=ctx.guild
+            color=BRAND_COLOR
         )
-        await ctx.send(embed=embed, delete_after=5)
-    
+        if ctx.guild and ctx.guild.icon:
+            embed.set_footer(text=f"{ctx.guild.name} • Prime Network", icon_url=ctx.guild.icon.url)
+        else:
+            embed.set_footer(text="Prime Network")
+        await ctx.send(embed=embed)
     elif isinstance(error, commands.MissingRequiredArgument):
-        embed = create_error_embed(
-            title="Missing Argument",
+        embed = discord.Embed(
+            title="❌ Missing Argument",
             description=f"Missing required argument: `{error.param.name}`",
-            guild=ctx.guild
+            color=BRAND_COLOR
         )
-        await ctx.send(embed=embed, delete_after=5)
-    
+        if ctx.guild and ctx.guild.icon:
+            embed.set_footer(text=f"{ctx.guild.name} • Prime Network", icon_url=ctx.guild.icon.url)
+        else:
+            embed.set_footer(text="Prime Network")
+        await ctx.send(embed=embed)
     elif isinstance(error, commands.CommandNotFound):
-        pass  # Silent on unknown commands
-    
+        pass
     else:
-        print(f"Unhandled error: {error}")
+        print(f"Error: {error}")
 
-# ==================== KEEP-ALIVE ====================
+# ==================== SYSTEM CHECK DECORATOR ====================
+
+def require_active_system():
+    """Decorator to check if system is active"""
+    async def predicate(ctx):
+        if not is_system_active():
+            embed = discord.Embed(
+                title="❌ System Offline",
+                description="The loyalty system is currently disabled.",
+                color=BRAND_COLOR
+            )
+            if ctx.guild and ctx.guild.icon:
+                embed.set_footer(text=f"{ctx.guild.name} • Prime Network", icon_url=ctx.guild.icon.url)
+            else:
+                embed.set_footer(text="Prime Network")
+            await ctx.send(embed=embed)
+            return False
+        return True
+    return commands.check(predicate)
+
+# ==================== KEEP-ALIVE SERVER ====================
 
 app = Flask('')
 
 @app.route('/')
 def home():
-    return "Bot is alive!"
+    return "Pawn Bot is alive!"
 
 @app.route('/health')
 def health():
     return {
         "status": "healthy",
+        "bot": "Pawn",
+        "network": "Prime Network",
         "guilds": len(bot.guilds),
-        "loyal_members": get_loyal_count()
+        "loyal_members": get_loyal_member_count(),
+        "active_loyal_members": get_active_loyal_count(),
+        "system_active": is_system_active()
     }
 
 def run():
@@ -506,6 +610,8 @@ def keep_alive():
     t = Thread(target=run)
     t.daemon = True
     t.start()
+
+# ==================== BOT STARTUP ====================
 
 if __name__ == "__main__":
     keep_alive()

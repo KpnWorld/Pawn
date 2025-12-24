@@ -1,0 +1,16 @@
+{
+    "network_config": {
+        "main_hub_id": 1449199091937443965,
+        "main_hub_invite": "https://discord.gg/F9PB47S3FJ",
+        "system_active": true,
+        "trusted_users": [895767962722660372]
+    },
+    "global_blacklist": [],
+    "global_users": {},
+    "guilds": {},
+    "stats": {
+        "daily_joins": {},
+        "daily_leaves": {},
+        "activity_snapshots": {}
+    }
+}
