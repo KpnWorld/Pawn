@@ -9,8 +9,8 @@ import os
 # Add parent directory to path to import from bot.py
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import bot as bot_module
 from bot import (
-    DATA,
     save_data,
     get_guild_data,
     get_user_data,
@@ -262,7 +262,7 @@ class Network(commands.Cog):
         
         # Get loyal members in this guild (by main server)
         loyal_members = []
-        for user_id_str, user_data in DATA.get("global_users", {}).items():
+        for user_id_str, user_data in bot_module.DATA.get("global_users", {}).items():
             if user_data.get("is_loyal") and user_data.get("main_server_id") == ctx.guild.id:
                 member = ctx.guild.get_member(int(user_id_str))
                 if member:
@@ -369,7 +369,7 @@ class Network(commands.Cog):
             return
         
         # Get ALL loyal members
-        loyal_user_ids = [int(uid) for uid, data in DATA.get("global_users", {}).items() 
+        loyal_user_ids = [int(uid) for uid, data in bot_module.DATA.get("global_users", {}).items() 
                          if data.get("is_loyal") and not data.get("is_inactive")]
         
         if not loyal_user_ids:
@@ -478,7 +478,7 @@ class Network(commands.Cog):
         
         # Get loyal members NOT in hub
         loyal_members = []
-        for user_id_str, user_data in DATA.get("global_users", {}).items():
+        for user_id_str, user_data in bot_module.DATA.get("global_users", {}).items():
             if user_data.get("is_loyal") and user_data.get("main_server_id") == ctx.guild.id:
                 user_id = int(user_id_str)
                 if not check_user_in_hub(user_id):
@@ -551,7 +551,7 @@ class Network(commands.Cog):
             return
         
         # Get all active loyal members
-        loyal_user_ids = [int(uid) for uid, data in DATA.get("global_users", {}).items() 
+        loyal_user_ids = [int(uid) for uid, data in bot_module.DATA.get("global_users", {}).items() 
                          if data.get("is_loyal") and not data.get("is_inactive")]
         
         if not loyal_user_ids:
