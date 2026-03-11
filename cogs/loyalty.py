@@ -1,15 +1,15 @@
 import discord
 from discord.ext import commands
 from typing import Optional, Union
-from datetime import datetime
+from datetime import datetime, timezone
 import sys
 import os
 
 # Add parent directory to path to import from bot.py
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import bot as bot_module
 from bot import (
-    DATA, 
     save_data, 
     get_guild_data, 
     get_user_data,
@@ -182,12 +182,15 @@ class Loyalty(commands.Cog):
         
         # Get top loyal members by streak (active only)
         loyal_members = []
-        for user_id_str, user_data in DATA.get("global_users", {}).items():
+        for user_id_str, user_data in bot_module.DATA.get("global_users", {}).items():
             if user_data.get("is_loyal") and not user_data.get("is_inactive", False):
+                uid = int(user_id_str)
+                member = ctx.guild.get_member(uid)
                 loyal_members.append({
-                    "user_id": int(user_id_str),
+                    "user_id": uid,
                     "messages": user_data.get("total_messages", 0),
-                    "streak": user_data.get("streak", 0)
+                    "streak": user_data.get("streak", 0),
+                    "display_name": member.display_name if member else user_data.get("main_server_name", f"User {uid}")
                 })
         
         loyal_members.sort(key=lambda x: (x["streak"], x["messages"]), reverse=True)
@@ -265,12 +268,15 @@ class Loyalty(commands.Cog):
         
         # Get top 10 active loyal members
         loyal_members = []
-        for user_id_str, user_data in DATA.get("global_users", {}).items():
+        for user_id_str, user_data in bot_module.DATA.get("global_users", {}).items():
             if user_data.get("is_loyal") and not user_data.get("is_inactive", False):
+                uid = int(user_id_str)
+                member = ctx.guild.get_member(uid)
                 loyal_members.append({
-                    "user_id": int(user_id_str),
+                    "user_id": uid,
                     "messages": user_data.get("total_messages", 0),
-                    "streak": user_data.get("streak", 0)
+                    "streak": user_data.get("streak", 0),
+                    "display_name": member.display_name if member else user_data.get("main_server_name", f"User {uid}")
                 })
         
         loyal_members.sort(key=lambda x: (x["streak"], x["messages"]), reverse=True)
@@ -440,11 +446,13 @@ class Loyalty(commands.Cog):
         user_data["main_server_id"] = None
         user_data["main_server_name"] = None
         
-        # Update stats
-        today = datetime.now().strftime("%Y-%m-%d")
-        if today not in DATA["stats"]["daily_leaves"]:
-            DATA["stats"]["daily_leaves"][today] = 0
-        DATA["stats"]["daily_leaves"][today] += 1
+        # Update stats (safe access in case stats structure is missing)
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        if "stats" not in bot_module.DATA:
+            bot_module.DATA["stats"] = {"daily_joins": {}, "daily_leaves": {}, "activity_snapshots": {}}
+        if "daily_leaves" not in bot_module.DATA["stats"]:
+            bot_module.DATA["stats"]["daily_leaves"] = {}
+        bot_module.DATA["stats"]["daily_leaves"][today] = bot_module.DATA["stats"]["daily_leaves"].get(today, 0) + 1
         
         save_data()
         
