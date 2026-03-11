@@ -4,13 +4,13 @@ from typing import Optional, Literal
 import json
 import sys
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # Add parent directory to path to import from bot.py
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import bot as bot_module
 from bot import (
-    DATA,
     save_data,
     get_loyal_member_count,
     get_active_loyal_count,
@@ -101,7 +101,7 @@ class Sudo(commands.Cog):
     async def trusted(self, ctx):
         """Trusted user management"""
         # Show trusted users
-        trusted_users = DATA.get("network_config", {}).get("trusted_users", [])
+        trusted_users = bot_module.DATA.get("network_config", {}).get("trusted_users", [])
         
         users_text = ""
         for user_id in trusted_users:
@@ -131,12 +131,12 @@ class Sudo(commands.Cog):
         Usage: $ su trusted remove 123456789
         Usage: $ su trusted remove all
         """
-        trusted_users = DATA.get("network_config", {}).get("trusted_users", [])
+        trusted_users = bot_module.DATA.get("network_config", {}).get("trusted_users", [])
         
         if user_id.lower() == "all":
             # Remove all except owner
             removed = [uid for uid in trusted_users if uid != BOT_OWNER_ID]
-            DATA["network_config"]["trusted_users"] = [BOT_OWNER_ID]
+            bot_module.DATA["network_config"]["trusted_users"] = [BOT_OWNER_ID]
             save_data()
             
             embed = create_success_embed(
@@ -181,7 +181,7 @@ class Sudo(commands.Cog):
         
         # Remove from list
         trusted_users.remove(user_id_int)
-        DATA["network_config"]["trusted_users"] = trusted_users
+        bot_module.DATA["network_config"]["trusted_users"] = trusted_users
         save_data()
         
         # Fetch user info
@@ -245,7 +245,7 @@ class Sudo(commands.Cog):
             return
         
         # Get table data
-        table_data = DATA.get(table, {})
+        table_data = bot_module.DATA.get(table, {})
         json_str = json.dumps(table_data, indent=2)
         
         # Truncate if too long
@@ -272,21 +272,21 @@ class Sudo(commands.Cog):
         # Check for required tables
         required_tables = ["network_config", "global_blacklist", "global_users", "guilds", "stats"]
         for table in required_tables:
-            if table not in DATA:
+            if table not in bot_module.DATA:
                 issues.append(f"❌ Missing table: `{table}`")
         
         # Check network_config structure
-        if "network_config" in DATA:
+        if "network_config" in bot_module.DATA:
             required_fields = ["main_hub_id", "main_hub_invite", "system_active", "trusted_users"]
             for field in required_fields:
-                if field not in DATA["network_config"]:
+                if field not in bot_module.DATA["network_config"]:
                     issues.append(f"❌ Missing field in network_config: `{field}`")
         
         # Check stats structure
-        if "stats" in DATA:
+        if "stats" in bot_module.DATA:
             required_fields = ["daily_joins", "daily_leaves", "activity_snapshots"]
             for field in required_fields:
-                if field not in DATA["stats"]:
+                if field not in bot_module.DATA["stats"]:
                     issues.append(f"❌ Missing field in stats: `{field}`")
         
         if issues:
@@ -342,12 +342,12 @@ class Sudo(commands.Cog):
         
         Usage: $ su stats overview
         """
-        total_guilds = len(DATA.get("guilds", {}))
-        total_users = len(DATA.get("global_users", {}))
+        total_guilds = len(bot_module.DATA.get("guilds", {}))
+        total_users = len(bot_module.DATA.get("global_users", {}))
         loyal_count = get_loyal_member_count()
         active_loyal = get_active_loyal_count()
-        blacklisted = len(DATA.get("global_blacklist", []))
-        trusted_count = len(DATA.get("network_config", {}).get("trusted_users", []))
+        blacklisted = len(bot_module.DATA.get("global_blacklist", []))
+        trusted_count = len(bot_module.DATA.get("network_config", {}).get("trusted_users", []))
         
         embed = create_network_stats_embed(
             total_guilds=total_guilds,
@@ -368,7 +368,7 @@ class Sudo(commands.Cog):
         
         Usage: $ su stats activity
         """
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         
         # Count active today
         active_today = 0
@@ -376,7 +376,7 @@ class Sudo(commands.Cog):
         total_streak = 0
         loyal_count = 0
         
-        for user_data in DATA.get("global_users", {}).values():
+        for user_data in bot_module.DATA.get("global_users", {}).values():
             if user_data.get("is_loyal"):
                 loyal_count += 1
                 total_messages += user_data.get("total_messages", 0)
@@ -413,13 +413,13 @@ class Sudo(commands.Cog):
         
         Usage: $ su stats network
         """
-        daily_joins = DATA.get("stats", {}).get("daily_joins", {})
-        daily_leaves = DATA.get("stats", {}).get("daily_leaves", {})
+        daily_joins = bot_module.DATA.get("stats", {}).get("daily_joins", {})
+        daily_leaves = bot_module.DATA.get("stats", {}).get("daily_leaves", {})
         
         # Get last 7 days
         trends_text = "**Last 7 Days:**\n```"
         for i in range(6, -1, -1):
-            date = (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")
+            date = (datetime.now(timezone.utc) - timedelta(days=i)).strftime("%Y-%m-%d")
             joins = daily_joins.get(date, 0)
             leaves = daily_leaves.get(date, 0)
             net = joins - leaves
