@@ -327,9 +327,9 @@ def create_leaderboard_embed(
             messages = member_data.get("messages", 0)
             streak = member_data.get("streak", 0)
             
+            # Try guild member first, fall back to display name stored in data
             member = guild.get_member(user_id)
-            if not member:
-                continue
+            display_name = member.display_name if member else member_data.get("display_name", f"User {user_id}")
             
             # Add medal for top 3, number for others
             if idx <= 3:
@@ -338,7 +338,7 @@ def create_leaderboard_embed(
                 position = f"`#{idx:02d}`"
             
             leaderboard_text += (
-                f"{position} **{member.display_name}**\n"
+                f"{position} **{display_name}**\n"
                 f"└ {messages} messages • {streak} day streak\n\n"
             )
         
@@ -435,7 +435,8 @@ def create_user_stats_embed(
     )
     
     # Joined date
-    joined = user_data.get('opt_in_date', 'Unknown')
+    joined_raw = user_data.get('opt_in_date', None)
+    joined = format_relative_time(joined_raw) if joined_raw else "Unknown"
     embed.add_field(
         name="Joined Network",
         value=joined,
@@ -443,7 +444,8 @@ def create_user_stats_embed(
     )
     
     # Last activity
-    last_active = user_data.get('last_activity', 'Unknown')
+    last_active_raw = user_data.get('last_activity', None)
+    last_active = format_relative_time(last_active_raw) if last_active_raw else "Unknown"
     embed.add_field(
         name="Last Active",
         value=last_active,
@@ -656,8 +658,8 @@ def format_relative_time(timestamp_str: str) -> str:
         str: Relative time string (e.g., "2 days ago")
     """
     try:
-        timestamp = datetime.strptime(timestamp_str, "%Y-%m-%d")
-        delta = datetime.now() - timestamp
+        timestamp = datetime.strptime(timestamp_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        delta = datetime.now(timezone.utc) - timestamp
         
         if delta.days > 0:
             return f"{delta.days} day{'s' if delta.days != 1 else ''} ago"
