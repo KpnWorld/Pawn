@@ -47,7 +47,19 @@ def get_prefix(bot, message):
         return DATA["guilds"][guild_id_str]["prefix"]
     return '$'
 
-bot = commands.Bot(command_prefix=get_prefix, intents=intents)
+class PawnBot(commands.Bot):
+    async def setup_hook(self):
+        """Load cogs once at startup before on_ready fires"""
+        load_data()
+        cogs = ['cogs.loyalty', 'cogs.network', 'cogs.security', 'cogs.server', 'cogs.sudo']
+        for cog in cogs:
+            try:
+                await self.load_extension(cog)
+                print(f'✅ {cog} loaded')
+            except Exception as e:
+                print(f'❌ Failed to load {cog}: {e}')
+
+bot = PawnBot(command_prefix=get_prefix, intents=intents)
 
 # Data Storage
 DATA_FILE = 'loyalty_data.json'
@@ -154,7 +166,7 @@ def get_active_loyal_count() -> int:
 def update_user_activity(user_id: int, guild_id: int):
     """Update user's activity, location, and streak"""
     user_data = get_user_data(user_id)
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     
     # Update activity
     user_data["last_activity"] = today
@@ -197,9 +209,10 @@ async def on_member_join(member):
     if member.bot:
         return
     
-    # Check if user is blacklisted
+    # Check if user is blacklisted (IDs stored as strings in list)
     user_id_str = str(member.id)
-    if user_id_str in DATA.get("global_blacklist", []):
+    blacklist = DATA.get("global_blacklist", [])
+    if user_id_str in blacklist or member.id in blacklist:
         try:
             await member.guild.ban(member, reason="Global blacklist - Auto-ban on join")
             print(f"Auto-banned blacklisted user {member.id} from {member.guild.name}")
@@ -209,7 +222,6 @@ async def on_member_join(member):
 @bot.event
 async def on_ready():
     """Bot startup event"""
-    load_data()
     bot_name = bot.user.name if bot.user else "Bot"
     print(f'{bot_name} has connected to Discord!')
     print(f'Connected to {len(bot.guilds)} guilds')
@@ -222,41 +234,13 @@ async def on_ready():
     except Exception as e:
         print(f'Failed to sync commands: {e}')
     
-    # Load cogs
-    try:
-        await bot.load_extension('cogs.loyalty')
-        print('✅ Loyalty module loaded')
-    except Exception as e:
-        print(f'❌ Failed to load Loyalty: {e}')
-    
-    try:
-        await bot.load_extension('cogs.network')
-        print('✅ Network module loaded')
-    except Exception as e:
-        print(f'❌ Failed to load Network: {e}')
-    
-    try:
-        await bot.load_extension('cogs.security')
-        print('✅ Security module loaded')
-    except Exception as e:
-        print(f'❌ Failed to load Security: {e}')
-    
-    try:
-        await bot.load_extension('cogs.server')
-        print('✅ Server module loaded')
-    except Exception as e:
-        print(f'❌ Failed to load Server: {e}')
-    
-    try:
-        await bot.load_extension('cogs.sudo')
-        print('✅ Sudo module loaded')
-    except Exception as e:
-        print(f'❌ Failed to load Sudo: {e}')
-    
-    # Start background tasks
-    update_presence.start()
-    update_dashboard.start()
-    check_inactive_users.start()
+    # Start background tasks (guard against double-start on reconnect)
+    if not update_presence.is_running():
+        update_presence.start()
+    if not update_dashboard.is_running():
+        update_dashboard.start()
+    if not check_inactive_users.is_running():
+        check_inactive_users.start()
 
 @bot.event
 async def on_guild_join(guild):
@@ -385,7 +369,7 @@ async def on_raw_reaction_add(payload):
             return
         
         user_data = get_user_data(payload.user_id)
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         
         # Mark as loyal
         user_data["is_loyal"] = True
@@ -473,10 +457,13 @@ async def update_dashboard():
         loyal_members = []
         for user_id_str, user_data in DATA.get("global_users", {}).items():
             if user_data.get("is_loyal") and not user_data.get("is_inactive", False):
+                uid = int(user_id_str)
+                member = guild.get_member(uid)
                 loyal_members.append({
-                    "user_id": int(user_id_str),
+                    "user_id": uid,
                     "messages": user_data.get("total_messages", 0),
-                    "streak": user_data.get("streak", 0)
+                    "streak": user_data.get("streak", 0),
+                    "display_name": member.display_name if member else user_data.get("main_server_name", f"User {uid}")
                 })
         
         loyal_members.sort(key=lambda x: (x["streak"], x["messages"]), reverse=True)
@@ -507,7 +494,7 @@ async def update_dashboard():
 @tasks.loop(hours=24)
 async def check_inactive_users():
     """Check for inactive users and mark them"""
-    current_time = datetime.now()
+    current_time = datetime.now(timezone.utc)
     
     for user_id_str, user_data in DATA.get("global_users", {}).items():
         if not user_data.get("is_loyal", False):
@@ -518,7 +505,8 @@ async def check_inactive_users():
             continue
         
         try:
-            last_active_date = datetime.strptime(last_activity, "%Y-%m-%d")
+            # Parse as naive date then make UTC-aware for comparison
+            last_active_date = datetime.strptime(last_activity, "%Y-%m-%d").replace(tzinfo=timezone.utc)
             days_inactive = (current_time - last_active_date).days
             
             # Mark as inactive if no activity for 7+ days
@@ -526,8 +514,8 @@ async def check_inactive_users():
                 if not user_data.get("is_inactive", False):
                     user_data["is_inactive"] = True
                     print(f"Marked user {user_id_str} as inactive ({days_inactive} days)")
-        except:
-            pass
+        except Exception as e:
+            print(f"Error checking inactivity for {user_id_str}: {e}")
     
     save_data()
 
