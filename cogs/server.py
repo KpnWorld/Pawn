@@ -7,8 +7,8 @@ import os
 # Add parent directory to path to import from bot.py
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import bot as bot_module
 from bot import (
-    DATA,
     save_data,
     get_guild_data,
     is_trusted_user,
@@ -194,8 +194,8 @@ class Server(commands.Cog):
             
             # Remove guild data
             guild_id_str = str(ctx.guild.id)
-            if guild_id_str in DATA.get("guilds", {}):
-                del DATA["guilds"][guild_id_str]
+            if guild_id_str in bot_module.DATA.get("guilds", {}):
+                del bot_module.DATA["guilds"][guild_id_str]
                 save_data()
             
             embed = create_success_embed(
