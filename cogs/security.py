@@ -8,8 +8,8 @@ import os
 # Add parent directory to path to import from bot.py
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import bot as bot_module
 from bot import (
-    DATA,
     save_data,
     is_trusted_user,
     is_owner,
@@ -132,7 +132,7 @@ class Security(commands.Cog):
             return
         
         # Check if already banned
-        if user_id in DATA.get("global_blacklist", []):
+        if user_id in bot_module.DATA.get("global_blacklist", []):
             embed = create_error_embed(
                 title="Already Banned",
                 description=f"User `{user_id}` is already on the global blacklist.",
@@ -142,10 +142,10 @@ class Security(commands.Cog):
             return
         
         # Add to blacklist
-        if "global_blacklist" not in DATA:
-            DATA["global_blacklist"] = []
+        if "global_blacklist" not in bot_module.DATA:
+            bot_module.DATA["global_blacklist"] = []
         
-        DATA["global_blacklist"].append(user_id)
+        bot_module.DATA["global_blacklist"].append(user_id)
         save_data()
         
         # Try to ban from all guilds
@@ -285,7 +285,7 @@ class Security(commands.Cog):
             await ctx.send(embed=embed)
             return
         
-        if not DATA["network_config"]["system_active"]:
+        if not bot_module.DATA["network_config"]["system_active"]:
             embed = create_error_embed(
                 title="Already Disabled",
                 description="The loyalty system is already disabled.",
@@ -325,7 +325,7 @@ class Security(commands.Cog):
                 return
             
             # Stop system
-            DATA["network_config"]["system_active"] = False
+            bot_module.DATA["network_config"]["system_active"] = False
             save_data()
             
             embed = create_success_embed(
@@ -363,7 +363,7 @@ class Security(commands.Cog):
             await ctx.send(embed=embed)
             return
         
-        if DATA["network_config"]["system_active"]:
+        if bot_module.DATA["network_config"]["system_active"]:
             embed = create_error_embed(
                 title="Already Active",
                 description="The loyalty system is already active.",
@@ -373,7 +373,7 @@ class Security(commands.Cog):
             return
         
         # Start system
-        DATA["network_config"]["system_active"] = True
+        bot_module.DATA["network_config"]["system_active"] = True
         save_data()
         
         embed = create_success_embed(
@@ -399,7 +399,7 @@ class Security(commands.Cog):
             return
         
         # Show current trusted users
-        trusted_users = DATA.get("network_config", {}).get("trusted_users", [])
+        trusted_users = bot_module.DATA.get("network_config", {}).get("trusted_users", [])
         
         users_text = ""
         for user_id in trusted_users:
@@ -439,7 +439,7 @@ class Security(commands.Cog):
             return
         
         # Check if already trusted
-        trusted_users = DATA.get("network_config", {}).get("trusted_users", [])
+        trusted_users = bot_module.DATA.get("network_config", {}).get("trusted_users", [])
         if user.id in trusted_users:
             embed = create_error_embed(
                 title="Already Trusted",
@@ -451,7 +451,7 @@ class Security(commands.Cog):
         
         # Add to trusted list
         trusted_users.append(user.id)
-        DATA["network_config"]["trusted_users"] = trusted_users
+        bot_module.DATA["network_config"]["trusted_users"] = trusted_users
         save_data()
         
         embed = create_success_embed(
